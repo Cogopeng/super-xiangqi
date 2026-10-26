@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>超級象棋 · 大盤暗棋</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="fx.css">
+<style>
+  :root {
+    --bg: #1d1a17;
+    --panel: #2a251f;
+    --panel-2: #342e26;
+    --text: #efe6d6;
+    --muted: #a99b85;
+    --wood: #e2bf86;
+    --wood-2: #d6ae70;
+    --line: #6b4a24;
+    --red: #b8261c;
+    --black: #1f1f1f;
+    --ivory: #fbf3e1;
+    --accent: #f0b54a;
+    --move: #2f9e5b;
+    --cap: #e0362b;
+    --dark: #ef8a1f;
+    --merge: #2f7de0;
+    --shoot: #a347e0;
+    --serif: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+    /* 手機優先：棋盤寬 ≈ 8.4 格 + 邊框；上方資訊列＋下方按鈕列約 200px */
+    --cell: min(calc((100vw - 30px) / 8.4), calc((100vh - 200px) / 9.4), 64px);
+  }
+  @supports (height: 100dvh) {
+    :root { --cell: min(calc((100vw - 30px) / 8.4), calc((100dvh - 200px) / 9.4), 64px); }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(ellipse at top, #2c2620, var(--bg) 70%);
+    color: var(--text);
+    font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .app {
+    min-height: 100vh; min-height: 100dvh;
+    max-width: 560px; margin: 0 auto;
+    display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+    padding: max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
+  }
+  /* ---------- 棋盤 ---------- */
+  .board-wrap { flex: 1; display: flex; align-items: center; justify-content: center; }
+  .board-frame {
+    padding: calc(var(--cell) * 0.2);
+    background: linear-gradient(135deg, #8a5a2b, #5e3b1a);
+    border-radius: 14px;
+    box-shadow: 0 18px 40px rgba(0,0,0,.55), inset 0 0 0 2px rgba(255,255,255,.08);
+  }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(8, var(--cell));
+    grid-template-rows: repeat(9, var(--cell));
+    background:
+      repeating-linear-gradient(90deg, rgba(120,70,20,.05) 0 3px, transparent 3px 9px),
+      linear-gradient(160deg, var(--wood), var(--wood-2));
+    border: 3px solid var(--line);
+    position: relative;
+    user-select: none; -webkit-user-select: none;
+  }
+  .cell {
+    position: relative;
+    border-right: 1px solid rgba(107,74,36,.55);
+    border-bottom: 1px solid rgba(107,74,36,.55);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .cell.alt { background: rgba(107,74,36,.10); }
+  .cell:nth-child(8n) { border-right: none; }
+  .cell:nth-last-child(-n+8) { border-bottom: none; }
+  .cell.last-from { background: rgba(240,181,74,.28); }
+  .cell.last-to { background: rgba(240,181,74,.45); }
+
+  .piece {
+    width: 84%; height: 84%; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-weight: 900;
+    font-size: calc(var(--cell) * 0.46);
+    position: relative;
+    transition: transform .15s ease, box-shadow .15s ease, filter .2s;
+  }
+  .piece.face {
+    background: radial-gradient(circle at 35% 30%, #fffaf0, var(--ivory) 45%, #e8d7b6);
+    box-shadow: 0 3px 0 #b39563, 0 5px 8px rgba(0,0,0,.35);
+  }
+  .piece.face::before {
+    content: ""; position: absolute; inset: 7%; border-radius: 50%;
+    border: 2px solid currentColor; opacity: .75;
+  }
+  .piece.r { color: var(--red); }
+  .piece.b { color: var(--black); }
+  .piece.hidden {
+    background:
+      radial-gradient(circle at 50% 50%, transparent 0 17%, rgba(255,214,150,.30) 17.5% 19.5%, transparent 20%),
+      radial-gradient(circle at 50% 50%, #7a4a22 0 16%, transparent 16.5%),
+      repeating-conic-gradient(from 0deg, rgba(255,214,150,.10) 0 7.5deg, transparent 7.5deg 15deg),
+      radial-gradient(circle at 34% 28%, #9a6838, #6b4220 55%, #4a2c12);
+    box-shadow:
+      inset 0 0 0 calc(var(--cell) * .035) #4a2c12,
+      inset 0 0 0 calc(var(--cell) * .055) rgba(255,214,150,.35),
+      inset 0 2px 3px rgba(255,235,200,.25),
+      0 3px 0 #2a1808, 0 5px 8px rgba(0,0,0,.4);
+  }
+  .piece.hidden::before {
+    content: ""; position: absolute; inset: 22%; border-radius: 50%;
+    border: 1px solid rgba(255,214,150,.28);
+    box-shadow: inset 0 0 6px rgba(0,0,0,.35);
+  }
+  .piece.hidden::after {
+    content: ""; position: absolute; width: 14%; height: 14%; border-radius: 2px;
+    transform: rotate(45deg);
+    background: rgba(255,214,150,.38);
+    box-shadow: 0 0 0 2px #6b4220, 0 0 0 3px rgba(255,214,150,.25);
+  }
+  .piece.selected { transform: translateY(-4px) scale(1.06); box-shadow: 0 0 0 3px var(--accent), 0 10px 16px rgba(0,0,0,.45); }
+  .piece.resting { filter: grayscale(.85) brightness(.85); }
+  .piece.mine:not(.resting) { cursor: pointer; }
+  .badge {
+    position: absolute; font-family: var(--serif); font-weight: 900;
+    width: 40%; height: 40%; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: calc(var(--cell) * 0.19);
+    box-shadow: 0 1px 3px rgba(0,0,0,.5);
+    z-index: 2;
+  }
+  .badge.rider { left: -8%; top: -8%; background: var(--ivory); border: 2px solid currentColor; }
+  .badge.rest { right: -8%; bottom: -8%; background: #555; color: #fff; border: 2px solid #222; }
+  .badge.bow { right: -8%; top: -8%; background: var(--shoot); color: #fff; font-size: calc(var(--cell) * 0.16); border: 2px solid #fff; }
+
+  .hint { position: absolute; inset: 0; pointer-events: none; display: flex; align-items: center; justify-content: center; z-index: 3; }
+  .hint.move::after { content: ""; width: 26%; height: 26%; border-radius: 50%; background: var(--move); opacity: .85; box-shadow: 0 0 0 3px rgba(255,255,255,.5); }
+  .hint.ring::after { content: ""; width: 92%; height: 92%; border-radius: 50%; border: 4px solid var(--c); box-shadow: 0 0 10px var(--c); }
+  .hint.cap { --c: var(--cap); }
+  .hint.dark { --c: var(--dark); }
+  .hint.merge { --c: var(--merge); }
+  .hint.shoot { --c: var(--shoot); }
+  .hint.both { --c: var(--cap); }
+  .hint.both::after { box-shadow: 0 0 0 4px var(--shoot), 0 0 12px var(--shoot); }
+  .hint .tag {
+    position: absolute; bottom: -2px; font-size: 10px; padding: 0 4px; border-radius: 4px;
+    background: var(--c); color: #fff; font-weight: 700; white-space: nowrap;
+  }
+
+
+  .choice {
+    position: absolute; z-index: 10; left: 50%; top: -6px; transform: translate(-50%, -100%);
+    display: flex; gap: 6px; padding: 6px; border-radius: 10px;
+    background: var(--panel); box-shadow: 0 8px 20px rgba(0,0,0,.5);
+  }
+  .choice button { padding: 6px 12px; font-weight: 700; white-space: nowrap; }
+  .choice .eat { background: var(--cap); border-color: var(--cap); color: #fff; }
+  .choice .fire { background: var(--shoot); border-color: var(--shoot); color: #fff; }
+
+  .ticker {
+    width: 100%; height: 30px; overflow: hidden; position: relative;
+    background: rgba(0,0,0,.35); border-radius: 8px;
+  }
+  .ticker span {
+    position: absolute; top: 0; left: 0; line-height: 30px; white-space: nowrap;
+    color: var(--accent); font-size: 15px; font-weight: 600;
+    transform: translateX(var(--from)); animation: tick var(--dur) linear forwards;
+  }
+  .ticker span.r { color: #ff8a7a; } .ticker span.b { color: #e6e6e6; }
+  @keyframes tick { from { transform: translateX(var(--from)); } to { transform: translateX(var(--to)); } }
+
+
+  /* ---------- 上方資訊列 ---------- */
+  .hud { display: flex; flex-direction: column; gap: 6px; }
+  .players { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .player {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel); border-radius: 10px; padding: 8px 10px;
+    border: 2px solid transparent; transition: border-color .2s, opacity .2s;
+    font-weight: 700; font-size: 15px; opacity: .6;
+  }
+  .player.active { border-color: var(--accent); opacity: 1; }
+  .player .meta { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 13px; }
+  .chip { width: 16px; height: 16px; border-radius: 50%; display: inline-block; border: 2px solid #fff3; flex: none; }
+  .chip.r { background: var(--red); } .chip.b { background: #111; border-color: #9a8f7e; }
+  .chip.none { background: repeating-linear-gradient(45deg,#555 0 3px,#333 3px 6px); }
+  .status { text-align: center; font-size: 14px; color: var(--muted); min-height: 20px; }
+  .status.over { color: var(--accent); font-weight: 700; font-size: 16px; }
+
+  /* ---------- 下方按鈕列 ---------- */
+  .dock { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  select, button {
+    font: inherit; font-size: 15px; color: var(--text);
+    background: var(--panel); border: 1px solid #4a4135; border-radius: 10px; padding: 11px 10px;
+  }
+  button { cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); color: #2a1d08; border-color: var(--accent); font-weight: 700; }
+  @media (hover: hover) { button:hover:not(:disabled) { border-color: var(--accent); } }
+
+  /* ---------- 選單 ---------- */
+  .sheet[open] { display: flex; flex-direction: column; gap: 12px; }
+  .sheet label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  .sheet select, .sheet button { width: 100%; }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; }
+  .sheet-head b { font-family: var(--serif); font-size: 20px; }
+  .sheet-head button { width: auto; padding: 6px 12px; }
+  .sheet h3 { margin: 4px 0 0; font-size: 13px; color: var(--muted); font-weight: 400; }
+  .kills-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; }
+  .kills-row b { min-width: 4.5em; }
+  .kills-row span {
+    font-family: var(--serif); font-weight: 900; font-size: 13px; width: 24px; height: 24px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center; background: var(--ivory);
+  }
+  .kills-row span.r { color: var(--red); } .kills-row span.b { color: var(--black); }
+
+  dialog {
+    max-width: 520px; width: calc(100% - 24px); max-height: 86vh; overflow-y: auto; background: var(--panel); color: var(--text);
+    border: 1px solid #4a4135; border-radius: 14px; padding: 20px 22px; line-height: 1.7;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog h2 { font-family: var(--serif); margin-top: 0; }
+  dialog table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  dialog td, dialog th { border-bottom: 1px solid #4a4135; padding: 5px 6px; text-align: left; vertical-align: top; }
+  dialog th { color: var(--accent); white-space: nowrap; }
+  dialog .close { float: right; }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="hud">
+    <div class="players" id="players"></div>
+    <div class="status" id="status"></div>
+    <div class="ticker" id="ticker"></div>
+  </header>
+  <main class="board-wrap">
+    <div class="board-frame"><div class="board" id="board"></div></div>
+  </main>
+  <nav class="dock">
+    <button id="btnUndo">悔棋</button>
+    <button class="primary" id="btnNew">新局</button>
+    <button id="btnMenu">選單</button>
+  </nav>
+</div>
+
+<dialog id="menu" class="sheet">
+  <div class="sheet-head"><b>超級象棋</b><button onclick="this.closest('dialog').close()">關閉</button></div>
+  <label>模式
+    <select id="mode">
+      <option value="pvp">雙人對戰</option>
+      <option value="ai1">對電腦（我先手）</option>
+      <option value="ai0">對電腦（電腦先手）</option>
+    </select>
+  </label>
+  <label>電腦難度
+    <select id="level">
+      <option value="easy">簡單</option>
+      <option value="normal" selected>普通</option>
+      <option value="hard">困難</option>
+    </select>
+  </label>
+  <button id="btnSound">音效：開</button>
+  <button id="btnRules">規則說明</button>
+  <h3>戰況（吃掉的棋子）</h3>
+  <div id="kills"></div>
+</dialog>
+
+<dialog id="rules">
+  <button class="close" onclick="this.closest('dialog').close()">關閉</button>
+  <h2>規則說明</h2>
+  <p><b>棋盤</b>：8 × 9 共 72 格，沒有河界，棋子放在格子裡。開局 32 顆全部蓋著，間隔一格錯落擺放。</p>
+  <p><b>流程</b>：每回合做一件事——翻一顆棋、走一步、吃一顆，或騎兵射一箭。第一個翻棋的人，翻到什麼顏色就是那一方。</p>
+  <p><b>吃子</b>：沒有大小，任何棋子都能吃任何敵方棋子。可以<b>暗吃</b>：直接攻擊蓋著的棋，翻開是敵方就吃掉；是自己的就翻開、原地不動，這回合結束。</p>
+  <table>
+    <tr><th>帥／將</th><td>直線走 1～2 格（走 2 格時中間要空）</td></tr>
+    <tr><th>仕／士</th><td>斜線衝，不限格數</td></tr>
+    <tr><th>相／象</th><td>走田（斜 2 格），中間有子不能走</td></tr>
+    <tr><th>俥／車</th><td>直線不限格數</td></tr>
+    <tr><th>傌／馬</th><td>走日，有拐馬腳</td></tr>
+    <tr><th>炮／砲</th><td>一次只走 1 格；吃子要隔一顆炮架，距離不限</td></tr>
+    <tr><th>兵／卒</th><td>直線 1 格</td></tr>
+  </table>
+  <p><b>騎乘</b>：己方兵與已翻開的傌、相、俥走到同一格就合體（不能下馬），移動方式同坐騎，另外可以<b>射箭</b>（不移動，直接射殺範圍內的棋，箭不會被擋、可以射暗棋）：</p>
+  <table>
+    <tr><th>兵騎傌</th><td>走日；射周圍 1 格</td></tr>
+    <tr><th>兵騎相</th><td>走田；射周圍 2 格（5×5），<b>射完要停一回合</b></td></tr>
+    <tr><th>兵騎俥</th><td>走直線；射周圍 1 格</td></tr>
+  </table>
+  <p>合體被吃，兩顆一起死。</p>
+  <p><b>勝負</b>：吃光對方所有棋子獲勝。連續 50 回合沒有翻棋或吃子判和。</p>
+  <p><b>操作</b>：點蓋著的棋＝翻棋；點自己的棋＝選取，再點亮起的格子行動。騎兵的移動與射箭目標會一起亮；同一格既能吃又能射時，會跳出「吃／射」讓你選。</p>
+</dialog>
+
+<script src="engine.js"></script>
+<script src="ai.js" onerror="console.warn('ai.js 尚未就緒，電腦會隨機走')"></script>
+<script src="sound.js"></script>
+<script src="fx.js"></script>
+<script>
+(function () {
+  'use strict';
+  const E = window.Engine;
+  const $ = id => document.getElementById(id);
+  const boardEl = $('board'), statusEl = $('status'), playersEl = $('players'), tickerEl = $('ticker');
+
+  let game, history, selected = null, choiceAt = null, aiToken = 0, thinking = false;
+  let mode = 'pvp', level = 'normal';
+  const COLOR_NAME = { r: '紅', b: '黑' };
+
+  try { mode = localStorage.getItem('sx-mode') || mode; level = localStorage.getItem('sx-level') || level; } catch (e) {}
+  $('mode').value = mode; $('level').value = level;
+
+  // ---------- 建立格子 ----------
+  const cells = [];
+  for (let i = 0; i < E.N; i++) {
+    const el = document.createElement('div');
+    const c = E.colOf(i), r = E.rowOf(i);
+    el.className = 'cell' + ((c + r) % 2 === 0 ? ' alt' : '');
+    el.addEventListener('click', () => onCell(i));
+    boardEl.appendChild(el);
+    cells.push(el);
+  }
+
+  // ---------- 玩家 / 模式 ----------
+  const aiSide = () => (mode === 'ai1' ? 1 : mode === 'ai0' ? 0 : -1);
+  const isAITurn = () => game.winner === null && game.turn === aiSide();
+  function playerName(p) {
+    if (mode === 'pvp') return p === 0 ? '玩家一' : '玩家二';
+    return p === aiSide() ? '電腦' : '你';
+  }
+  function pieceName(p) {
+    if (!p) return '';
+    const n = E.NAMES[p.color];
+    return COLOR_NAME[p.color] + (p.riding ? n.P + '騎' + n[p.type] : n[p.type]);
+  }
+
+  // ---------- 跑馬燈 ----------
+  const queue = [];
+  let ticking = false;
+  function say(msg, color) {
+    if (!msg) return;
+    queue.push({ msg, color });
+    if (queue.length > 3) queue.splice(0, queue.length - 3);
+    if (!ticking) nextTick();
+  }
+  function nextTick() {
+    const item = queue.shift();
+    if (!item) { ticking = false; return; }
+    ticking = true;
+    tickerEl.innerHTML = '';
+    const sp = document.createElement('span');
+    sp.textContent = item.msg;
+    if (item.color) sp.className = item.color;
+    tickerEl.appendChild(sp);
+    const w = tickerEl.clientWidth, tw = sp.offsetWidth;
+    const fast = queue.length > 0;
+    const dur = Math.max(1.6, (w + tw) / (fast ? 420 : 260));
+    sp.style.setProperty('--from', w + 'px');
+    sp.style.setProperty('--to', -tw + 'px');
+    sp.style.setProperty('--dur', dur + 's');
+    sp.addEventListener('animationend', nextTick, { once: true });
+  }
+  function clearTicker() { queue.length = 0; ticking = false; tickerEl.innerHTML = ''; }
+
+  // ---------- 音效 / 特效掛點（sound.js / fx.js 提供，缺檔時自動略過） ----------
+  const sfx = name => { try { if (window.SFX) window.SFX.play(name); } catch (e) { console.error(e); } };
+  const fxCtx = { board: () => boardEl, cell: i => cells[i], state: () => game };
+  const fx = (res, a) => { try { if (window.FX) window.FX.play(res, a, fxCtx); } catch (e) { console.error(e); } };
+
+  // ---------- 新局 / 悔棋 ----------
+  function newGame() {
+    aiToken++; thinking = false;
+    game = E.newGame(); history = []; selected = null; choiceAt = null;
+    clearTicker();
+    render(); sfx('new-game'); maybeAI();
+  }
+  function undo() {
+    if (!history.length || thinking) return;
+    aiToken++;
+    do { game = history.pop(); } while (history.length && isAITurn());
+    selected = null; choiceAt = null;
+    clearTicker(); say('已悔棋');
+    render(); sfx('undo'); maybeAI();
+  }
+
+  // ---------- 執行動作 ----------
+  function act(a) {
+    history.push(game);
+    game = E.apply(game, a);
+    selected = null; choiceAt = null;
+    const res = game.lastResult;
+    say(describe(res, a), res.piece ? res.piece.color : null);
+    if (game.winner !== null) say(game.winner === 'draw' ? '和局！' : `${playerName(game.winner)} 獲勝！`);
+    render(true);
+    sfx(res.kind);
+    fx(res, a);
+    if (game.winner !== null) {
+      const end = game.winner === 'draw' ? 'draw' : (game.winner === aiSide() ? 'lose' : 'win');
+      setTimeout(() => sfx(end), 500);
+      try { if (window.FX && window.FX.gameOver) window.FX.gameOver(end, fxCtx); } catch (e) { console.error(e); }
+    }
+    maybeAI();
+  }
+
+  function describe(res, a) {
+    const who = playerName(res.player);
+    const pn = pieceName(res.piece), tn = pieceName(res.target);
+    switch (res.kind) {
+      case 'flip': return `${who} 翻開 ${pn}`;
+      case 'move': return `${pn} 移動`;
+      case 'capture': return `${pn} 吃掉 ${tn}`;
+      case 'dark-capture': return `${pn} 暗吃！翻出 ${tn}，吃掉`;
+      case 'dark-own': return `${pn} 暗吃，翻出自己的 ${tn}，白走一步`;
+      case 'merge': return `${pn} 合體！`;
+      case 'shoot-kill': return `${pn} 射殺 ${tn}` + (res.piece.type === 'E' ? '，休息一回合' : '');
+      case 'shoot-own': return `${pn} 射中暗棋，是自己的 ${tn}` + (res.piece.type === 'E' ? '，休息一回合' : '');
+      case 'pass': return `${who} 無棋可走，跳過`;
+    }
+    return '';
+  }
+
+  // ---------- 電腦 ----------
+  function maybeAI() {
+    if (!isAITurn()) return;
+    const token = ++aiToken;
+    thinking = true; renderStatus();
+    setTimeout(() => {
+      if (token !== aiToken) return;
+      const legal = E.legalActions(game);
+      let a = null;
+      try { if (window.AI) a = window.AI.chooseAction(game, { level }); } catch (e) { console.error(e); }
+      const same = x => x && legal.find(l => l.type === x.type && l.at === x.at && l.from === x.from && l.to === x.to);
+      a = same(a) || legal[Math.floor(Math.random() * legal.length)];
+      thinking = false;
+      if (token !== aiToken) return;
+      act(a);
+    }, 450);
+  }
+
+  // ---------- 點擊 ----------
+  function targetsOf(i) {
+    const p = i === null ? null : game.board[i];
+    if (!p || !p.revealed || E.isResting(game, p)) return { move: [], shoot: [] };
+    return { move: E.moveTargets(game, i), shoot: E.shootTargets(game, i) };
+  }
+
+  function onCell(i) {
+    if (game.winner !== null || isAITurn() || thinking) return;
+    if (choiceAt !== null) { choiceAt = null; render(); if (i === selected) return; }
+    const me = game.playerColor[game.turn];
+    const p = game.board[i];
+
+    if (selected !== null) {
+      const t = targetsOf(selected);
+      const canMove = t.move.includes(i), canShoot = t.shoot.includes(i);
+      if (canMove && canShoot) { choiceAt = i; render(); sfx('select'); return; }
+      if (canMove) { act({ type: 'move', from: selected, to: i }); return; }
+      if (canShoot) { act({ type: 'shoot', from: selected, to: i }); return; }
+      const wasSel = selected;
+      selected = null;
+      if (wasSel === i || !p || !p.revealed || p.color !== me) { render(); return; }
+    }
+
+    if (p && !p.revealed) { act({ type: 'flip', at: i }); return; }
+    if (p && me && p.color === me) {
+      if (E.isResting(game, p)) { say('這隻騎相剛射完箭，休息中'); sfx('invalid'); return; }
+      selected = i;
+      render(); sfx('select');
+    }
+  }
+
+  function showChoice(i) {
+    const box = document.createElement('div');
+    box.className = 'choice';
+    const mk = (cls, txt, a) => {
+      const bt = document.createElement('button');
+      bt.className = cls; bt.textContent = txt;
+      bt.addEventListener('click', e => { e.stopPropagation(); act(a); });
+      box.appendChild(bt);
+    };
+    mk('eat', '吃', { type: 'move', from: selected, to: i });
+    mk('fire', game.board[selected].type === 'E' ? '射（休一回合）' : '射', { type: 'shoot', from: selected, to: i });
+    cells[i].appendChild(box);
+  }
+
+  // ---------- 繪製 ----------
+  function render(animate) {
+    const b = game.board, me = game.playerColor[game.turn];
+    const la = game.lastAction;
+    const sel = selected !== null ? b[selected] : null;
+    const t = targetsOf(selected);
+
+    for (let i = 0; i < E.N; i++) {
+      const cell = cells[i], p = b[i];
+      cell.classList.toggle('last-from', !!la && la.from === i);
+      cell.classList.toggle('last-to', !!la && (la.to === i || la.at === i));
+      cell.innerHTML = '';
+      if (p) {
+        const el = document.createElement('div');
+        if (!p.revealed) {
+          el.className = 'piece hidden';
+        } else {
+          el.className = `piece face ${p.color}`;
+          el.textContent = E.NAMES[p.color][p.type];
+          if (p.color === me) el.classList.add('mine');
+          if (p.riding) {
+            const bd = document.createElement('span');
+            bd.className = 'badge rider'; bd.textContent = E.NAMES[p.color].P;
+            el.appendChild(bd);
+            const bow = document.createElement('span');
+            bow.className = 'badge bow'; bow.textContent = '弓';
+            el.appendChild(bow);
+          }
+          if (E.isResting(game, p)) {
+            el.classList.add('resting');
+            const rs = document.createElement('span');
+            rs.className = 'badge rest'; rs.textContent = '休';
+            el.appendChild(rs);
+          }
+        }
+        if (i === selected) el.classList.add('selected');
+        cell.appendChild(el);
+      }
+
+      const canMove = t.move.includes(i), canShoot = t.shoot.includes(i);
+      if (canMove || canShoot) {
+        const h = document.createElement('div');
+        let kind, tag = '';
+        if (canMove && canShoot) { kind = 'ring both'; tag = '吃／射'; }
+        else if (canShoot) { kind = 'ring shoot'; tag = '射'; }
+        else if (!p) kind = 'move';
+        else if (!p.revealed) { kind = 'ring dark'; tag = '暗吃'; }
+        else if (p.color !== sel.color) { kind = 'ring cap'; tag = '吃'; }
+        else { kind = 'ring merge'; tag = '騎乘'; }
+        h.className = 'hint ' + kind;
+        if (tag) { const tg = document.createElement('span'); tg.className = 'tag'; tg.textContent = tag; h.appendChild(tg); }
+        cell.appendChild(h);
+      }
+    }
+    if (choiceAt !== null) showChoice(choiceAt);
+    renderStatus(); renderPlayers();
+  }
+
+  function renderStatus() {
+    const g = game;
+    statusEl.classList.toggle('over', g.winner !== null);
+    if (g.winner === 'draw') { statusEl.textContent = '和局！連續 50 回合沒有翻棋或吃子。'; return; }
+    if (g.winner !== null) {
+      statusEl.textContent = `${playerName(g.winner)}（${COLOR_NAME[g.playerColor[g.winner]]}）獲勝！`;
+      return;
+    }
+    const who = playerName(g.turn), col = g.playerColor[g.turn];
+    let s = col ? `輪到 ${who}` : `${who}先翻一顆棋，翻到的顏色就是你的陣營`;
+    if (thinking) s = '電腦思考中…';
+    if (col && g.quiet >= 60) s += `・和局倒數 ${Math.ceil((E.DRAW_PLIES - g.quiet) / 2)} 回合`;
+    statusEl.textContent = s;
+  }
+
+  function renderPlayers() {
+    const left = E.countPieces(game);
+    playersEl.innerHTML = [0, 1].map(p => {
+      const col = game.playerColor[p];
+      const active = game.turn === p && game.winner === null ? ' active' : '';
+      return `<div class="player${active}"><span class="chip ${col || 'none'}"></span>${playerName(p)}
+        <span class="meta">${col ? COLOR_NAME[col] + ' ' + left[col] : '未定'}</span></div>`;
+    }).join('');
+    $('kills').innerHTML = [0, 1].map(p => {
+      const col = game.playerColor[p];
+      const kills = col ? game.captured[E.opp(col)] : [];
+      return `<div class="kills-row"><b>${playerName(p)}</b>${kills.length ? kills.map(t => `<span class="${E.opp(col)}">${E.NAMES[E.opp(col)][t]}</span>`).join('') : '—'}</div>`;
+    }).join('');
+  }
+
+  // ---------- 控制 ----------
+  $('btnNew').onclick = newGame;
+  $('btnUndo').onclick = undo;
+  $('btnMenu').onclick = () => $('menu').showModal();
+  $('btnRules').onclick = () => { $('menu').close(); $('rules').showModal(); };
+  for (const d of document.querySelectorAll('dialog')) d.addEventListener('click', e => { if (e.target === d) d.close(); });
+  const soundLabel = () => { $('btnSound').textContent = '音效：' + (window.SFX && !window.SFX.enabled ? '關' : '開'); };
+  $('btnSound').onclick = () => { if (window.SFX) { window.SFX.setEnabled(!window.SFX.enabled); soundLabel(); sfx('select'); } };
+  soundLabel();
+  $('mode').onchange = e => { mode = e.target.value; try { localStorage.setItem('sx-mode', mode); } catch (x) {} $('menu').close(); newGame(); };
+  $('level').onchange = e => { level = e.target.value; try { localStorage.setItem('sx-level', level); } catch (x) {} };
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { selected = null; choiceAt = null; render(); }
+  });
+
+  // 除錯用：在 console 讀取或載入局面
+  window.__sx = { get: () => game, load: s => { aiToken++; game = s; history = []; selected = null; choiceAt = null; render(); maybeAI(); } };
+
+  newGame();
+})();
+</script>
+</body>
+</html>
